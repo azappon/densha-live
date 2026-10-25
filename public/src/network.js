@@ -70,8 +70,19 @@ export class Line {
         }
         this.m = Float64Array.from(data.m);
         this.length = this.m[n - 1];
-        // Metres per mercator unit near this line (for heading smoothing)
-        this.meterScale = 1 / (40075016.7 * Math.cos(data.c[0][1] * Math.PI / 180));
+        this.cars = data.cars || 6;
+        this.carLen = data.carLen || 20;
+        // Tunnel sections as [start, end] chainage pairs
+        this.ug = data.ug || [];
+    }
+
+    underground(s) {
+        for (const [a, b] of this.ug) {
+            if (s >= a && s <= b) {
+                return true;
+            }
+        }
+        return false;
     }
 
     _seg(s) {
@@ -122,12 +133,34 @@ export class Line {
         return out;
     }
 
-    toGeoJSON() {
-        return {
-            type: 'Feature',
-            properties: {id: this.id, color: this.color, ja: this.ja, en: this.en, op: this.op},
-            geometry: {type: 'LineString', coordinates: this.coords}
-        };
+    // The drawn line, split into surface (ug 0) and tunnel (ug 1) runs
+    toFeatures() {
+        const props = ug => ({id: this.id, color: this.color, op: this.op, ug});
+        const cuts = [0];
+        for (const [a, b] of this.ug) {
+            cuts.push(a, b);
+        }
+        cuts.push(this.length);
+        const features = [];
+        const p = {x: 0, y: 0};
+        for (let k = 0; k < cuts.length - 1; k++) {
+            const a = cuts[k], b = cuts[k + 1];
+            if (b - a < 1) {
+                continue;
+            }
+            const coords = [];
+            this.point(a, p);
+            coords.push(toLngLat(p.x, p.y));
+            for (let i = 0; i < this.m.length; i++) {
+                if (this.m[i] > a && this.m[i] < b) {
+                    coords.push(this.coords[i]);
+                }
+            }
+            this.point(b, p);
+            coords.push(toLngLat(p.x, p.y));
+            features.push({type: 'Feature', properties: props(k % 2), geometry: {type: 'LineString', coordinates: coords}});
+        }
+        return features;
     }
 }
 
@@ -155,7 +188,7 @@ export class Network {
     }
 
     linesGeoJSON() {
-        return {type: 'FeatureCollection', features: this.lines.map(l => l.toGeoJSON())};
+        return {type: 'FeatureCollection', features: this.lines.flatMap(l => l.toFeatures())};
     }
 
     stationsGeoJSON() {

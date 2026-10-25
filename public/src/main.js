@@ -1,6 +1,7 @@
 import {Network, mercatorX, mercatorY} from './network.js';
-import {TrainLayer, STRIDE} from './trainlayer.js';
-import {basemapStyle, railLayers} from './mapstyle.js';
+import {TrainLayer} from './trainlayer.js';
+import {TrainLook} from './trainlook.js';
+import {basemapStyle, railLayers, applyRailView} from './mapstyle.js';
 import {serviceTime, formatClock, formatMinutes} from './clock.js';
 import {STR} from './i18n.js';
 import {setupTokyo} from './tokyo.js';
@@ -14,8 +15,8 @@ const DATA_BASE = 'data/tokyo/';
 const SETTINGS_KEY = 'densha-live:settings';
 const defaults = {
     lang: (navigator.language || 'en').startsWith('ja') ? 'ja' : 'en',
-    theme: 'auto',
     fps: 30,
+    underground: false,
     odptKey: '',
     challengeKey: '',
     hiddenOps: []
@@ -51,19 +52,12 @@ const timeOffset = (() => {
 })();
 const clockNow = () => Date.now() + timeOffset;
 
-// ---------- theme ----------
-const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
-const currentTheme = () => settings.theme === 'auto' ? (darkQuery.matches ? 'dark' : 'light') : settings.theme;
-function applyThemeAttr() {
-    document.documentElement.dataset.theme = currentTheme();
-    document.documentElement.lang = settings.lang;
-}
-applyThemeAttr();
+document.documentElement.lang = settings.lang;
 
 // ---------- map ----------
 const map = new maplibregl.Map({
     container: 'map',
-    style: basemapStyle(currentTheme(), settings.lang),
+    style: basemapStyle(settings.lang),
     center: HOME.center,
     zoom: HOME.zoom,
     minZoom: 5,
@@ -78,8 +72,8 @@ map.touchZoomRotate.disableRotation();
 map.keyboard.disableRotation();
 
 const trainLayer = new TrainLayer();
-trainLayer.setTheme(currentTheme() === 'dark');
 trainLayer.setReference(mercatorX(HOME.center[0]), mercatorY(HOME.center[1]));
+const look = new TrainLook();
 
 let ctx = null;          // loaded network, providers and feeds
 let loadToken = 0;
@@ -90,7 +84,7 @@ function installRailLayers() {
         map.addSource('rail-lines', {type: 'geojson', data: ctx ? ctx.linesGeo : {type: 'FeatureCollection', features: []}});
         map.addSource('rail-stations', {type: 'geojson', data: ctx ? ctx.stationsGeo : {type: 'FeatureCollection', features: []}});
     }
-    for (const layer of railLayers(currentTheme(), settings.lang)) {
+    for (const layer of railLayers(settings.lang, settings.underground)) {
         if (!map.getLayer(layer.id)) {
             map.addLayer(layer);
         }
@@ -108,17 +102,17 @@ function applyOperatorFilter() {
         return;
     }
     const hidden = settings.hiddenOps;
-    const filter = hidden.length ? ['!', ['in', ['get', 'op'], ['literal', hidden]]] : null;
-    map.setFilter('rail-line', filter);
-    map.setFilter('rail-case', filter);
+    const visible = hidden.length ? ['!', ['in', ['get', 'op'], ['literal', hidden]]] : null;
+    for (const [id, part] of [['rail-glow', 0], ['rail-line', 0], ['rail-tunnel', 1], ['rail-tunnel-glow', 1]]) {
+        const base = ['==', ['get', 'ug'], part];
+        map.setFilter(id, visible ? ['all', base, visible] : base);
+    }
 }
 
 function restyle() {
-    applyThemeAttr();
-    trainLayer.setTheme(currentTheme() === 'dark');
-    map.setStyle(basemapStyle(currentTheme(), settings.lang), {diff: false});
+    document.documentElement.lang = settings.lang;
+    map.setStyle(basemapStyle(settings.lang), {diff: false});
 }
-darkQuery.addEventListener('change', () => settings.theme === 'auto' && restyle());
 
 // ---------- data loading ----------
 async function fetchJSON(url) {
@@ -165,11 +159,11 @@ async function loadData() {
 }
 
 // ---------- per-frame simulation ----------
-let buf = new Float32Array(STRIDE * 8192);
-let pos = new Float64Array(2 * 8192);
+// pos holds head and tail (mercator) of every train for hit testing and follow mode
+let pos = new Float64Array(4 * 8192);
 let refs = new Array(8192);
-let count = 0, liveCount = 0;
-const pt = {x: 0, y: 0, hx: 1, hy: 0};
+let count = 0, liveCount = 0, frameSec = 1 / 30;
+const ends = new Float64Array(4);
 
 function emit(line, s, dir, kind, alpha, ref) {
     if (alpha <= 0.01) {
@@ -178,29 +172,23 @@ function emit(line, s, dir, kind, alpha, ref) {
     if (settings.hiddenOps.length && settings.hiddenOps.includes(line.op)) {
         return;
     }
-    if (count * STRIDE >= buf.length) {
-        const nb = new Float32Array(buf.length * 2);
-        nb.set(buf);
-        buf = nb;
+    if (count * 4 >= pos.length) {
         const np = new Float64Array(pos.length * 2);
         np.set(pos);
         pos = np;
         refs.length = refs.length * 2;
     }
-    line.at(s, dir, pt);
-    const o = count * STRIDE;
-    buf[o] = pt.x - ctx.refX;
-    buf[o + 1] = pt.y - ctx.refY;
-    buf[o + 2] = pt.hx;
-    buf[o + 3] = pt.hy;
-    buf[o + 4] = line.rgb[0];
-    buf[o + 5] = line.rgb[1];
-    buf[o + 6] = line.rgb[2];
-    buf[o + 7] = alpha;
-    buf[o + 8] = kind;
-    buf[o + 9] = ref === selection.ref ? 1 : 0;
-    pos[count * 2] = pt.x;
-    pos[count * 2 + 1] = pt.y;
+    // Speed (m/s) from frame-to-frame movement, smoothed; drives the trail length
+    if (ref._s === undefined || ref._line !== line || Math.abs(s - ref._s) > 2000) {
+        ref._v = 0;
+        ref._phase = Math.random() * 6.28;
+    } else {
+        ref._v += (Math.abs(s - ref._s) / frameSec - ref._v) * 0.2;
+    }
+    ref._s = s;
+    ref._line = line;
+    look.add(line, s, dir, kind === 1, alpha, ref._v, ref === selection.ref, ends, ref._phase);
+    pos.set(ends, count * 4);
     refs[count] = {ref, provider: currentProvider};
     if (kind === 1) {
         liveCount++;
@@ -222,6 +210,7 @@ function frame(ts) {
     }
     const dt = lastFrame ? Math.min(ts - lastFrame, 1000) : interval;
     lastFrame = ts;
+    frameSec = dt / 1000;
     const now = Date.now();
     const st = serviceTime(now + timeOffset);
     if (st.key !== ctx.dayKey && !ctx.reloading) {
@@ -233,17 +222,18 @@ function frame(ts) {
     count = 0;
     liveCount = 0;
     selectedPos = null;
+    look.begin(map, ctx.refX, ctx.refY, settings.underground, ts / 1000);
     for (const p of ctx.providers) {
         currentProvider = p;
         p.update(st.minutes, now, dt, emit);
     }
     for (let i = 0; i < count; i++) {
         if (refs[i].ref === selection.ref) {
-            selectedPos = [pos[i * 2], pos[i * 2 + 1]];
+            selectedPos = [pos[i * 4], pos[i * 4 + 1]];
             break;
         }
     }
-    trainLayer.setData(buf, count);
+    trainLayer.setLists(look.lists);
     if (selection.follow && selectedPos && !map.isMoving()) {
         map.jumpTo({center: mercatorToLngLat(selectedPos[0], selectedPos[1])});
     }
@@ -283,6 +273,20 @@ $('home').addEventListener('click', () => {
     map.flyTo({center: HOME.center, zoom: HOME.zoom, duration: 1200, essential: true});
 });
 
+// Underground view: tunnels light up, the surface network dims
+function updateUnderground() {
+    $('btnUnder').classList.toggle('on', settings.underground);
+    $('btnUnder').setAttribute('aria-pressed', String(settings.underground));
+    applyRailView(map, settings.underground);
+}
+
+$('btnUnder').addEventListener('click', () => {
+    settings.underground = !settings.underground;
+    saveSettings();
+    updateUnderground();
+});
+updateUnderground();
+
 // ---------- selection ----------
 map.on('click', e => {
     if (!ctx || !count) {
@@ -291,11 +295,16 @@ map.on('click', e => {
     const zoom = map.getZoom();
     const world = 512 * Math.pow(2, zoom);
     const cx = mercatorX(e.lngLat.lng), cy = mercatorY(e.lngLat.lat);
+    // Distance (px) from the tap to each train's head-tail segment
     const tol = 22;
     let best = -1, bestD = tol * tol;
     for (let i = 0; i < count; i++) {
-        const dx = (pos[i * 2] - cx) * world, dy = (pos[i * 2 + 1] - cy) * world;
-        const d = dx * dx + dy * dy;
+        const ax = (pos[i * 4] - cx) * world, ay = (pos[i * 4 + 1] - cy) * world;
+        const bx = (pos[i * 4 + 2] - cx) * world, by = (pos[i * 4 + 3] - cy) * world;
+        const ex = bx - ax, ey = by - ay, l2 = ex * ex + ey * ey;
+        const t = l2 > 0 ? Math.max(0, Math.min(1, -(ax * ex + ay * ey) / l2)) : 0;
+        const px = ax + ex * t, py = ay + ey * t;
+        const d = px * px + py * py;
         if (d < bestD) {
             bestD = d;
             best = i;
@@ -312,7 +321,7 @@ map.on('click', e => {
         // On phones the sheet covers the lower map: keep the train visible above it
         const sheetH = $('sheet').offsetHeight;
         if (window.innerWidth < 700 && e.point.y > window.innerHeight - sheetH - 40) {
-            map.easeTo({center: mercatorToLngLat(pos[best * 2], pos[best * 2 + 1]), padding: {bottom: sheetH}, duration: 600});
+            map.easeTo({center: mercatorToLngLat(pos[best * 4], pos[best * 4 + 1]), padding: {bottom: sheetH}, duration: 600});
         } else if (window.innerWidth < 700) {
             map.setPadding({top: 0, bottom: sheetH, left: 0, right: 0});
         }
@@ -451,7 +460,6 @@ function renderPanel() {
         p.hidden = p.dataset.page !== panelTab;
     });
     $('lblLang').textContent = s.language;
-    $('lblTheme').textContent = s.appearance;
     $('lblMotion').textContent = s.animation;
     document.querySelectorAll('.chips').forEach(ch => {
         const key = ch.dataset.setting;
@@ -514,7 +522,7 @@ document.querySelectorAll('.chips').forEach(ch => ch.addEventListener('click', e
     }
     settings[key] = value;
     saveSettings();
-    if (key === 'theme' || key === 'lang') {
+    if (key === 'lang') {
         restyle();
     }
     renderPanel();

@@ -50,6 +50,32 @@ OPERATORS = {
 }
 
 
+# Car length in metres where it differs from the usual 20 m
+CAR_LENGTH = {
+    'Yurikamome': 9, 'SaitamaTransit': 9, 'YokohamaSeaside': 9, 'Yamaman': 9, 'Toei.NipporiToneri': 9,
+    'TokyoMonorail': 15, 'TamaMonorail': 15, 'ChibaMonorail': 15, 'ShonanMonorail': 15, 'OdakyuHakone': 15,
+    'Toei.Arakawa': 13, 'UtsunomiyaLightRail': 15, 'Enoden': 12,
+}
+# Vertices deeper than this (Mini Tokyo 3D altitude units, -100 = fully underground) count as tunnel
+TUNNEL_ALTITUDE = -50
+
+
+def underground_intervals(coords, cum):
+    """Chainage ranges [start, end] in metres where the line runs in a tunnel."""
+    out = []
+    start = None
+    for c, m in zip(coords, cum):
+        under = len(c) > 2 and c[2] < TUNNEL_ALTITUDE
+        if under and start is None:
+            start = m
+        elif not under and start is not None:
+            out.append([round(start, 1), round(m, 1)])
+            start = None
+    if start is not None:
+        out.append([round(start, 1), round(cum[-1], 1)])
+    return out
+
+
 def fetch():
     CACHE.mkdir(parents=True, exist_ok=True)
     for name in FILES:
@@ -156,7 +182,9 @@ def build_network():
             'color': r['color'],
             'asc': r['ascending'],
             'desc': r['descending'],
-            'cars': r.get('carComposition', 0),
+            'cars': r.get('carComposition', 0) or 6,
+            'carLen': CAR_LENGTH.get(rid, CAR_LENGTH.get(op, 20)),
+            'ug': underground_intervals(coords, cum),
             'st': [station_ref(s) for s in r['stations']],
             # station offsets along the line, metres
             'off': [round(o * 1000, 1) for o in offsets],

@@ -3,8 +3,14 @@
 A live 2D map of every train and metro in **Greater Tokyo** (179 lines, 49k trains on a weekday),
 built as an installable web app (PWA) for the iPhone home screen.
 
-- MapLibre GL basemap (OpenFreeMap tiles, light/dark), with metro-map-style parallel lines on shared track
-- Trains are drawn on the GPU as track-aligned capsules and animated every frame, with accelerate/cruise/brake motion between stops
+- Night design: a dark, near-empty city where lines are faint threads of light and trains carry the brightness
+- Semantic zoom: far out each train is a point with a soft "city pulse" glow (busy corridors light up); in the middle it
+  stretches into a glowing capsule; up close it unfolds into its real number of real-length cars, bending through curves,
+  with a headlight in front and a tail light behind
+- Light trails along the track behind moving trains, longer when faster
+- Underground view (tunnel button): tunnels light up and the surface network fades back; in the normal view tunnels are dashed
+  and trains inside them are dimmed
+- Smooth accelerate/cruise/brake motion between stops, all drawn on the GPU in one pass
 - Tap a train for line, type, destination, next stop, delay and data source; **Follow** keeps it centred
 - English / 日本語, Japan time, weekday vs weekend/holiday timetables (Japanese holidays computed)
 

@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
     <title>Densha Live</title>
     <meta name="description" content="Live map of every train and metro in Greater Tokyo">
-    <meta name="theme-color" content="#14161b" media="(prefers-color-scheme: dark)">
-    <meta name="theme-color" content="#f3f2ee" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#07090d">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -37,6 +36,9 @@
             <span class="dot live"></span><span id="statsText">Loading…</span>
         </div>
         <div class="fabs">
+            <button id="btnUnder" class="fab glass" aria-label="Underground view" aria-pressed="false">
+                <svg viewBox="0 0 24 24" width="20" height="20"><path d="M3.5 20V12a8.5 8.5 0 0 1 17 0v8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9.5 20l1-6M14.5 20l-1-6M10 17h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </button>
             <button id="btnLocate" class="fab glass" aria-label="Show my location">
                 <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/></svg>
             </button>
@@ -67,12 +69,6 @@
                     <label id="lblLang">Language</label>
                     <div class="chips" data-setting="lang">
                         <button data-value="en">English</button><button data-value="ja">日本語</button>
-                    </div>
-                </div>
-                <div class="setting">
-                    <label id="lblTheme">Appearance</label>
-                    <div class="chips" data-setting="theme">
-                        <button data-value="auto">Auto</button><button data-value="light">Light</button><button data-value="dark">Dark</button>
                     </div>
                 </div>
                 <div class="setting">
