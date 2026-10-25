@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+    <title>Densha Live</title>
+    <meta name="description" content="Live map of every train and metro in Greater Tokyo">
+    <meta name="theme-color" content="#14161b" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#f3f2ee" media="(prefers-color-scheme: light)">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Densha">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="stylesheet" href="vendor/maplibre-gl.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="map" aria-label="Train map"></div>
+
+    <header class="topbar">
+        <button class="brand glass" id="home" aria-label="Back to Tokyo overview">
+            <span class="ja">東京</span><span class="en">Tokyo</span>
+        </button>
+        <div class="clock glass">
+            <span id="clock">--:--:--</span>
+            <span id="dayType" class="muted"></span>
+        </div>
+    </header>
+
+    <button id="alerts" class="alerts glass" hidden></button>
+
+    <div class="bottombar">
+        <div id="stats" class="stats glass">
+            <span class="dot live"></span><span id="statsText">Loading…</span>
+        </div>
+        <div class="fabs">
+            <button id="btnLocate" class="fab glass" aria-label="Show my location">
+                <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/></svg>
+            </button>
+            <button id="btnPanel" class="fab glass" aria-label="Data and settings">
+                <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 3 3 7.5l9 4.5 9-4.5L12 3Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m3 12 9 4.5 9-4.5M3 16.5 12 21l9-4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+            </button>
+        </div>
+    </div>
+
+    <section id="sheet" class="sheet glass" aria-live="polite" hidden>
+        <div class="grabber"></div>
+        <div id="sheetBody"></div>
+    </section>
+
+    <section id="panel" class="panel glass" hidden>
+        <div class="grabber"></div>
+        <div class="panel-head">
+            <div class="tabs" role="tablist">
+                <button class="tab active" data-tab="data" id="tabData">Data</button>
+                <button class="tab" data-tab="settings" id="tabSettings">Settings</button>
+            </div>
+            <button class="close" id="panelClose" aria-label="Close">✕</button>
+        </div>
+        <div class="panel-body">
+            <div class="tab-page" data-page="data" id="coverage"></div>
+            <div class="tab-page" data-page="settings" hidden>
+                <div class="setting">
+                    <label id="lblLang">Language</label>
+                    <div class="chips" data-setting="lang">
+                        <button data-value="en">English</button><button data-value="ja">日本語</button>
+                    </div>
+                </div>
+                <div class="setting">
+                    <label id="lblTheme">Appearance</label>
+                    <div class="chips" data-setting="theme">
+                        <button data-value="auto">Auto</button><button data-value="light">Light</button><button data-value="dark">Dark</button>
+                    </div>
+                </div>
+                <div class="setting">
+                    <label id="lblMotion">Animation</label>
+                    <div class="chips" data-setting="fps">
+                        <button data-value="15">Battery</button><button data-value="30">Balanced</button><button data-value="60">Smooth</button>
+                    </div>
+                </div>
+                <div class="setting">
+                    <label for="odptKey">ODPT developer key <a href="https://developer.odpt.org/" target="_blank" rel="noopener">get one ↗</a></label>
+                    <input type="text" id="odptKey" autocomplete="off" spellcheck="false" placeholder="Optional — adds Yokohama Subway + line status">
+                </div>
+                <div class="setting">
+                    <label for="challengeKey">ODPT Challenge 2026 key <a href="https://challenge2026.odpt.org/" target="_blank" rel="noopener">info ↗</a></label>
+                    <input type="text" id="challengeKey" autocomplete="off" spellcheck="false" placeholder="Optional — JR East, Keikyu, Keio, Tobu (until Mar 2027)">
+                </div>
+                <p class="fine">Keys are stored only on this device. Map © OpenFreeMap, OpenMapTiles, OpenStreetMap. Network &amp; timetables: Mini Tokyo 3D (MIT) / Public Transportation Open Data Center (ODPT). Live data: ODPT.</p>
+            </div>
+        </div>
+    </section>
+
+    <script src="vendor/maplibre-gl.js"></script>
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>
