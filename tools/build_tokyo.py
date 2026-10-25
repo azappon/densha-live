@@ -279,15 +279,62 @@ def build_timetable(name, lines, station_ref, type_list):
         if nm:
             title = nm[0]
             train_name = title.get('ja', '') + '|' + title.get('en', '')
-        # bit 1: continues from a previous train, bit 2: continues as a next train (through service)
-        flags = (1 if tr.get('pt') else 0) | (2 if tr.get('nt') else 0)
         trains.append([line_idx[rid], type_idx.get(tr['y'], -1), 0 if ascending else 1, tr['n'],
-                       dest_ref, train_name, t0, flat, flags])
-    print(f'  {name}: {len(trains)} trains, skipped {dict(skipped)}')
+                       dest_ref, train_name, t0, flat, 0, tr.get('pt') or [], tr.get('nt') or [], tr['id']])
+    # Through service: link each train to the one it continues as (first link when a train splits/joins).
+    # bit 1: continues from a previous train, bit 2: continues as a next train
+    index = {rec[11]: i for i, rec in enumerate(trains)}
+    linked = 0
+    for rec in trains:
+        prev = next((index[p] for p in rec[9] if p in index), -1)
+        nxt = next((index[n] for n in rec[10] if n in index), -1)
+        rec[8] = (1 if prev >= 0 else 0) | (2 if nxt >= 0 else 0)
+        rec[9], rec[10] = prev, nxt
+        del rec[11]
+        linked += nxt >= 0
+    print(f'  {name}: {len(trains)} trains, {linked} through-service links, skipped {dict(skipped)}')
     return trains
 
 
 STATIONS_ALL = set()
+
+TOEI_GTFS_URL = 'https://api-public.odpt.org/api/v4/files/Toei/data/Toei-Train-GTFS.zip'
+TOEI_ROUTES = {'1': 'Toei.Asakusa', '2': 'Toei.Mita', '3': 'Toei.Shinjuku', '4': 'Toei.Oedo',
+               '5': 'Toei.NipporiToneri', '6': 'Toei.Arakawa'}
+
+
+def build_toei_stops(lines, station_list):
+    """GTFS stop_id -> station index, so per-stop predictions can be matched to our stops."""
+    import csv
+    import io
+    import zipfile
+    path = CACHE.parent / 'toei-gtfs.zip'
+    if not path.exists():
+        print('downloading Toei GTFS')
+        req = urllib.request.Request(TOEI_GTFS_URL, headers={'User-Agent': 'densha-live-build/0.1'})
+        with urllib.request.urlopen(req) as res:
+            path.write_bytes(res.read())
+    with zipfile.ZipFile(path) as zf:
+        stops = list(csv.DictReader(io.TextIOWrapper(zf.open('stops.txt'), encoding='utf-8-sig')))
+        routes_of_stop = {}
+        for row in csv.DictReader(io.TextIOWrapper(zf.open('trips.txt'), encoding='utf-8-sig')):
+            routes_of_stop.setdefault(row['trip_id'], row['route_id'])
+        for row in csv.DictReader(io.TextIOWrapper(zf.open('stop_times.txt'), encoding='utf-8-sig')):
+            routes_of_stop.setdefault('s' + row['stop_id'], routes_of_stop.get(row['trip_id']))
+    by_line = {l['id']: l for l in lines}
+    out, missing = {}, []
+    for s in stops:
+        line = by_line.get(TOEI_ROUTES.get(routes_of_stop.get('s' + s['stop_id'], '')))
+        if not line:
+            continue
+        name = s['stop_name'].replace('停留場', '').strip()
+        match = next((i for i in line['st'] if station_list[i]['ja'].replace('〈', '<').split('<')[0] == name.split('（')[0]), None)
+        if match is None:
+            missing.append(name)
+        else:
+            out[s['stop_id']] = match
+    print(f'  Toei GTFS stops matched: {len(out)}, unmatched: {missing[:10]}')
+    return out
 
 
 def main():
@@ -309,8 +356,9 @@ def main():
         'lines': lines,
         'stations': station_list,
     }
+    toei_stops = build_toei_stops(lines, station_list)
     for name, obj in [('network.json', network), ('tt-weekday.json', {'trains': timetables['weekday']}),
-                      ('tt-holiday.json', {'trains': timetables['holiday']})]:
+                      ('tt-holiday.json', {'trains': timetables['holiday']}), ('rt-toei-stops.json', toei_stops)]:
         text = json.dumps(obj, ensure_ascii=False, separators=(',', ':'))
         (OUT / name).write_text(text, encoding='utf-8')
         print(f'  wrote {name}: {len(text.encode()) / 1e6:.1f} MB raw, {len(gzip.compress(text.encode())) / 1e6:.1f} MB gzip')

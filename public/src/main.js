@@ -178,8 +178,12 @@ function emit(line, s, dir, kind, alpha, ref) {
         pos = np;
         refs.length = refs.length * 2;
     }
-    // Speed (m/s) from frame-to-frame movement, smoothed; drives the trail length
-    if (ref._s === undefined || ref._line !== line || Math.abs(s - ref._s) > 2000) {
+    // Speed (m/s) from frame-to-frame movement, smoothed; drives the trail length.
+    // A through-running train's next leg carries on with the same speed and light phase.
+    if (ref._s === undefined && ref.prev && ref.prev._v !== undefined) {
+        ref._v = ref.prev._v;
+        ref._phase = ref.prev._phase;
+    } else if (ref._s === undefined || ref._line !== line || Math.abs(s - ref._s) > 2000) {
         ref._v = 0;
         ref._phase = Math.random() * 6.28;
     } else {
@@ -227,11 +231,11 @@ function frame(ts) {
         currentProvider = p;
         p.update(st.minutes, now, dt, emit);
     }
-    for (let i = 0; i < count; i++) {
-        if (refs[i].ref === selection.ref) {
-            selectedPos = [pos[i * 4], pos[i * 4 + 1]];
-            break;
-        }
+    findSelected();
+    // The selected train ran through onto another line: keep following it there
+    if (selection.ref && !selectedPos && selection.ref.next) {
+        selection.ref = selection.ref.next;
+        findSelected();
     }
     trainLayer.setLists(look.lists);
     if (selection.follow && selectedPos && !map.isMoving()) {
@@ -244,6 +248,16 @@ function frame(ts) {
     }
 }
 requestAnimationFrame(frame);
+
+function findSelected() {
+    for (let i = 0; i < count; i++) {
+        if (refs[i].ref === selection.ref) {
+            selectedPos = [pos[i * 4], pos[i * 4 + 1]];
+            selection.provider = refs[i].provider;
+            return;
+        }
+    }
+}
 
 function mercatorToLngLat(x, y) {
     const lng = x * 360 - 180;
@@ -372,11 +386,17 @@ function renderSheet(T) {
             delayText = s.late(d.delay);
             delayClass = d.delay >= 10 ? 'bad' : 'late';
         }
+        // Delay reported on an earlier leg of a through-running train
+        if (d.delayCarried) {
+            delayText = `≈ ${delayText}`;
+        }
     } else if (d.source === 'timetable') {
         delayText = s.scheduled;
         delayClass = 'dim';
     }
-    const next = d.next ? `${esc(d.next.name)}${d.next.time != null ? ` <span class="muted">${formatMinutes(d.next.time + (d.delay > 0 ? d.delay : 0))}</span>` : ''}` : '—';
+    const next = d.next ? `${esc(d.next.name)}${d.next.time != null ? ` <span class="muted">${formatMinutes(d.next.time)}</span>` : ''}` : '—';
+    const route = d.route ? `<div class="route" aria-label="${esc(s.throughService)}"><span class="route-k">${esc(s.throughService)}</span>${d.route.map(r =>
+        `<span class="route-leg${r.current ? ' now' : ''}"><i style="background:${r.line.color}"></i>${esc(lang === 'ja' ? r.line.ja : r.line.en)}</span>`).join('<span class="route-arrow">›</span>')}</div>` : '';
     const textColor = contrastText(line.color);
     $('sheetBody').innerHTML = `
         <div class="train-head">
@@ -385,6 +405,7 @@ function renderSheet(T) {
         </div>
         <div class="train-title">${esc(title)}</div>
         <div class="train-sub">${d.dest ? esc(s.bound(d.dest)) + ' · ' : ''}${esc(lang === 'ja' ? opNames.ja : opNames.en)}</div>
+        ${route}
         <div class="train-grid">
             <div class="cell"><div class="k">${d.next && d.next.atStation ? s.stoppedAt : s.next}</div><div class="v">${next}</div></div>
             <div class="cell"><div class="k">${s.delay}</div><div class="v ${delayClass}">${esc(delayText)}</div></div>
@@ -595,7 +616,7 @@ if ('serviceWorker' in navigator && (!isLocal || location.search.includes('sw=1'
 }
 
 // Exposed for debugging in the console
-window.densha = {map, settings, get ctx() {
+window.densha = {map, settings, selection, get ctx() {
     return ctx;
 }, get T() {
     return serviceTime(clockNow()).minutes;

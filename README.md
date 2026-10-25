@@ -17,7 +17,14 @@ built as an installable web app (PWA) for the iPhone home screen.
 ## Where the positions come from
 
 Every train runs from the full published timetables (49k weekday trains), and live data corrects it wherever an
-operator publishes some. **Solid + pulse = live**, **solid = timetable**.
+operator publishes some. Live trains have a gently breathing headlight.
+
+- **Through-running trains are one train.** 15k timetable legs are linked (e.g. Seibu Ikebukuro → Fukutoshin →
+  Tokyu Toyoko → Minatomirai), so a train hands over seamlessly at the boundary station, Follow and the details card
+  stay with it, the card shows the whole route, and a live delay reported on one operator carries on to the next legs.
+- **Per-stop predictions for Toei** from ODPT's GTFS-RT TripUpdates (no key needed): each upcoming stop gets its
+  own predicted time, so a train that is catching up or losing time moves accordingly instead of being shifted by
+  one fixed delay.
 
 | Operator | Live position | Notes |
 |---|---|---|

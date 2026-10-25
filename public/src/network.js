@@ -173,7 +173,12 @@ export class Network {
         this.operators = data.operators;
         this.types = data.types || [];
         this.directions = data.directions || {};
-        this.stations = data.stations;
+        // "Meiji-jingumae<Harajuku>" -> "Meiji-jingumae (Harajuku)", "明治神宮前〈原宿〉"
+        this.stations = data.stations.map(s => ({
+            ...s,
+            en: (s.en || '').replace(/<([^>]*)>/g, ' ($1)'),
+            ja: (s.ja || '').replace(/</g, '〈').replace(/>/g, '〉')
+        }));
         this.lines = data.lines.map((l, i) => new Line(l, i));
         this.lineById = new Map(this.lines.map(l => [l.id, l]));
         this.stationById = new Map(this.stations.map((s, i) => [s.id, i]));

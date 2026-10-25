@@ -1,7 +1,7 @@
 // Offline-friendly caching: app shell and timetable data are served from cache and
 // refreshed in the background; map tiles are cached up to a cap; live feeds never are.
 
-const VERSION = 'v3';
+const VERSION = 'v4';
 const SHELL = `densha-shell-${VERSION}`;
 const DATA = `densha-data-${VERSION}`;
 const TILES = `densha-tiles-${VERSION}`;
@@ -12,7 +12,7 @@ const SHELL_FILES = [
     './', 'index.html', 'styles.css', 'manifest.webmanifest',
     'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
     'src/main.js', 'src/network.js', 'src/timetable.js', 'src/live.js', 'src/trainlayer.js', 'src/trainlook.js',
-    'src/mapstyle.js', 'src/clock.js', 'src/i18n.js', 'src/tokyo.js', 'src/feeds/odpt.js',
+    'src/mapstyle.js', 'src/clock.js', 'src/i18n.js', 'src/tokyo.js', 'src/feeds/odpt.js', 'src/feeds/gtfsrt.js',
     'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png'
 ];
 

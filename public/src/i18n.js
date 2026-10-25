@@ -33,7 +33,8 @@ export const STR = {
         appearance: 'Appearance',
         animation: 'Animation',
         disruptions: 'Service changes',
-        timetableNote: 'Positions simulated from the published timetable'
+        timetableNote: 'Positions simulated from the published timetable',
+        throughService: 'Runs through'
     },
     ja: {
         loading: '読み込み中…',
@@ -69,6 +70,7 @@ export const STR = {
         appearance: '表示',
         animation: 'アニメーション',
         disruptions: '運行情報',
-        timetableNote: '公開時刻表から位置をシミュレーション'
+        timetableNote: '公開時刻表から位置をシミュレーション',
+        throughService: '直通運転'
     }
 };
