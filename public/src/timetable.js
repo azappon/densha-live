@@ -70,15 +70,6 @@ class TimetableTrain {
         this.pos = pos;
     }
 
-    // Station index (into line.stations) of each stop, in order
-    stopStations() {
-        const f = this.flat, out = [];
-        for (let i = 0; i < f.length; i += 3) {
-            out.push(this.line.stations[f[i]]);
-        }
-        return out;
-    }
-
     // Per-stop predicted times (minutes, same clock as the timetable). Stops without a
     // prediction keep their scheduled time shifted by the nearest known delay.
     setPredictions(arrPred, depPred, nowMs) {
@@ -145,10 +136,10 @@ class TimetableTrain {
         const n = arr.length;
         for (let i = 0; i < n; i++) {
             if (arr[i] > T || (i === n - 1)) {
-                return {station: this.line.stations[this.flat[i * 3]], time: arr[i], atStation: false};
+                return {i, station: this.line.stations[this.flat[i * 3]], time: arr[i], atStation: false};
             }
             if (T < dep[i]) {
-                return {station: this.line.stations[this.flat[i * 3]], time: dep[i], atStation: true};
+                return {i, station: this.line.stations[this.flat[i * 3]], time: dep[i], atStation: true};
             }
         }
         return null;
@@ -280,12 +271,14 @@ export class TimetableProvider {
         const inherited = !live && tr.inheritAt && now - tr.inheritAt < LIVE_TTL_MS;
         const predicted = tr.predicted(now);
         const next = tr.nextStop(T - tr.shownDelay, now);
+        // The operator's reported delay wins. Otherwise compare the prediction with the timetable at
+        // the same stop; timetable times are whole minutes, so under a minute counts as on time.
         let delay = null;
-        if (predicted && next) {
-            const sched = tr.nextStop(T - tr.shownDelay);
-            delay = sched ? Math.max(0, Math.round(next.time - (sched.time ?? next.time))) : null;
-        } else if (live || inherited) {
+        if (live || inherited) {
             delay = Math.round(tr.delay);
+        } else if (predicted && next) {
+            const late = next.time - (next.atStation ? tr.dep[next.i] : tr.arr[next.i]);
+            delay = late < 1 ? 0 : Math.round(late);
         }
         // Lines this train runs on, in order, without repeating consecutive legs on one line
         const route = [];

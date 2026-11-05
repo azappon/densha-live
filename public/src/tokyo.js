@@ -35,14 +35,11 @@ const NOTES = {
 };
 
 export async function setupTokyo({network, base, settings, dayType, onUpdate, fetchJSON}) {
-    const [tt, toeiStops] = await Promise.all([
-        fetchJSON(`${base}tt-${dayType}.json`),
-        fetchJSON(`${base}rt-toei-stops.json`)
-    ]);
+    const tt = await fetchJSON(`${base}tt-${dayType}.json`);
     const timetable = new TimetableProvider(network, tt.trains);
     const live = new LiveSegmentProvider(network);
     const feed = new OdptFeed({network, timetable, live, settings, onUpdate});
-    const predictions = new TripUpdateFeed({network, timetable, stops: toeiStops, onUpdate});
+    const predictions = new TripUpdateFeed({network, timetable, onUpdate});
     const lineCount = new Map();
     for (const l of network.lines) {
         lineCount.set(l.op, (lineCount.get(l.op) || 0) + 1);

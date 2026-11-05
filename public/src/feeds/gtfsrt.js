@@ -118,19 +118,43 @@ export function decodeTripUpdates(arrayBuffer) {
     return out;
 }
 
-// Toei trip_id: route digit, day/direction digit, 5-character train number, variant ("100403T0" -> 403T).
-// The Arakawa tram uses "ODPT" + 4 digits.
+// Toei trip_id: route digit, day/direction digit, 5-character train number, variant
+// ("100403T0" -> 403T, "121727NB" -> 1727Nb). The Arakawa tram uses "ODPT" + 4 digits.
 const TOEI = {
     url: 'https://api-public.odpt.org/api/v4/gtfs/realtime/toei_odpt_train_trip_update',
     lines: {1: 'Toei.Asakusa', 2: 'Toei.Mita', 3: 'Toei.Shinjuku', 4: 'Toei.Oedo', 5: 'Toei.NipporiToneri', 6: 'Toei.Arakawa'},
-    number: id => id[0] === '6' ? `ODPT${id.slice(2, 6)}` : id.slice(2, 7).replace(/^0+/, '')
+    number(id) {
+        if (id[0] === '6') {
+            return `ODPT${id.slice(2, 6)}`;
+        }
+        const variant = id[7] && id[7] !== '0' ? id[7].toLowerCase() : '';
+        return id.slice(2, 7).replace(/^0+/, '') + variant;
+    }
 };
 
+// Ignore a prediction this far from the timetable: it belongs to some other train
+const MAX_DEVIATION_MIN = 180;
+
+// The feed identifies stops by stop_sequence only. GTFS lists every station on the route, including
+// those an express passes, so sequence k is the k-th stop for all-stops trains and the k-th
+// station along the line for expresses. Checked against every trip in Toei's static GTFS.
+function stopFinder(tr, lastSeq) {
+    const f = tr.flat, n = f.length / 3;
+    if (lastSeq <= n) {
+        return seq => seq - 1;
+    }
+    const first = f[0], step = f[f.length - 3] >= first ? 1 : -1;
+    const stopAt = new Map();
+    for (let i = 0; i < n; i++) {
+        stopAt.set(f[i * 3], i);
+    }
+    return seq => stopAt.get(first + step * (seq - 1)) ?? -1;
+}
+
 export class TripUpdateFeed {
-    constructor({network, timetable, stops, onUpdate}) {
+    constructor({network, timetable, onUpdate}) {
         this.network = network;
         this.timetable = timetable;
-        this.stops = stops || {};    // GTFS stop_id -> station index
         this.onUpdate = onUpdate;
         this.state = {};
         this.trains = 0;
@@ -172,21 +196,21 @@ export class TripUpdateFeed {
                 continue;
             }
             tr.prepare();
-            const stations = tr.stopStations();
             const arr = [], dep = [];
             let any = false;
+            const lastSeq = tu.stops.reduce((m, st) => Math.max(m, st.seq || 0), 0);
+            const stopIndex = stopFinder(tr, lastSeq);
             for (const st of tu.stops) {
-                const station = this.stops[st.stopId];
-                const i = station === undefined ? -1 : stations.indexOf(station);
-                if (i < 0) {
+                const i = st.seq ? stopIndex(st.seq) : -1;
+                if (i < 0 || i >= tr.arr.length) {
                     continue;
                 }
                 const a = eventMinutes(st.arrival, tr.arr[i]), d = eventMinutes(st.departure, tr.dep[i]);
-                if (a !== undefined) {
+                if (a !== undefined && Math.abs(a - tr.arr[i]) < MAX_DEVIATION_MIN) {
                     arr[i] = a;
                     any = true;
                 }
-                if (d !== undefined) {
+                if (d !== undefined && Math.abs(d - tr.dep[i]) < MAX_DEVIATION_MIN) {
                     dep[i] = d;
                     any = true;
                 }

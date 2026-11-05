@@ -1,7 +1,7 @@
 // Offline-friendly caching: app shell and timetable data are served from cache and
 // refreshed in the background; map tiles are cached up to a cap; live feeds never are.
 
-const VERSION = 'v4';
+const VERSION = 'v5';
 const SHELL = `densha-shell-${VERSION}`;
 const DATA = `densha-data-${VERSION}`;
 const TILES = `densha-tiles-${VERSION}`;
